@@ -1,0 +1,2 @@
+#!/bin/sh
+sudo ./mbloader_arm -d /dev/ttyS0 -b 115200 -a 132 -m 32 -p88 bms.bin

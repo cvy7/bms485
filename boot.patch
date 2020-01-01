@@ -1,0 +1,26 @@
+28,30c28
+< LDFLAGS += -Wl,-u,vfprintf -Wl,--defsym=__stack=0x1000 -Wl,-Map=svz.map,--section-start=.bootloader=1f800
+< #129024 0x1f800 =0xfc00 words 2048 
+< #126976 0x1f000 =0xf800 words 4096
+---
+> LDFLAGS += -Wl,-u,vfprintf -Wl,--defsym=__stack=0x1000 -Wl,-Map=svz.map
+35d32
+< BIN_FLASH_FLAGS = -R .eeprom -R .fuse -R .lock -R .signature -R .bootloader
+50d46
+< OBJECTS+= bootloader.o
+60c56
+< all: $(TARGET) svz.hex svz.eep svz.lss svz.bin size
+---
+> all: $(TARGET) svz.hex svz.eep svz.lss size
+137,139d132
+< 	
+< bootloader.o: ../bootloader.c
+< 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
+147,149d139
+< 	
+< %.bin: $(TARGET)
+< 	avr-objcopy -O binary $(BIN_FLASH_FLAGS)  $< $@
+164c154
+< 	-rm -rf $(OBJECTS) svz.elf dep/* svz.eep svz.lss svz.map
+---
+> 	-rm -rf $(OBJECTS) svz.elf dep/* svz.hex svz.eep svz.lss svz.map

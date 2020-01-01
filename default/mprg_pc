@@ -1,0 +1,2 @@
+#!/bin/sh
+sudo ./mbloader_pc -d /dev/ttyS4 -b 115200 -a 132 -m 32 -p88 bms.bin

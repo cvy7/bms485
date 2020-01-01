@@ -1,0 +1,7 @@
+#sudo rfcomm connect /dev/rfcomm0 10:00:E8:65:27:DE
+
+sudo avrdude -p m88  -F -P /dev/rfcomm0 -c stk500v2 -e -U hfuse:w:0xce:m -U lfuse:w:0xfd:m -U efuse:w:0xf8:m
+#lfuse:w:0x7d =ck/8
+sudo avrdude -p m88 -F -P /dev/rfcomm0 -c stk500v2 -e -U flash:w:bms.hex
+#sudo avrdude -p m88 -F -P /dev/rfcomm0 -c stk500v2 -U eeprom:r:eep.bin:r
+#sudo avrdude -p m88 -F -P /dev/rfcomm0 -c stk500v2 -U flash:r:flash.bin:r
