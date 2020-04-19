@@ -51,6 +51,7 @@ PR_BEGIN_EXTERN_C
 
 /*! \brief If Modbus RTU support is enabled. */
 #define MB_RTU_ENABLED                          (  1 )
+#define MB_MANCHESTER                           (  1 )
 
 /*! \brief If Modbus TCP support is enabled. */
 //#define MB_TCP_ENABLED                          (  0 )
@@ -123,7 +124,7 @@ PR_BEGIN_EXTERN_C
 #define MB_FUNC_READ_DISCRETE_INPUTS_ENABLED    (  1 )
 
 /*! \brief If the <em>Read/Write Multiple Registers</em> function should be enabled. */
-#define MB_FUNC_READWRITE_HOLDING_ENABLED       (  1 )
+#define MB_FUNC_READWRITE_HOLDING_ENABLED       (  0 )
 
 /*! @} */
 #ifdef __cplusplus

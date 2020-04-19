@@ -22,7 +22,7 @@
  *     Thomas Fischl <tfischl@gmx.de>                                       *
  ****************************************************************************/
 //****************************************************************************/
-
+#define  MB_MANCHESTER (1)
 //if 0
 //точка входа- первая функция в секции
 #include <avr/boot.h>
@@ -41,7 +41,7 @@ boot();
 #include <avr/wdt.h>
 #include <util/crc16.h>
 
-#define BOOT_ADDR              132
+#define BOOT_ADDR              0x55
 
 #define BOOT_STATE_IDLE       1
 #define BOOT_STATE_WRITE_PAGE 2
@@ -115,6 +115,9 @@ XX   младший байт адреса (номер страницы)
 typedef struct {//на место основных переменных
 char state;
 char port;
+//char ch;
+//char manc0;
+//char manc1;
 unsigned char ucRTUBuf[64];
 } tbootvars;
 
@@ -174,13 +177,45 @@ for(;;){
    if (r>=0) {  boot_program_page (page,  &bootvars->ucRTUBuf[7]);
                if(boot_program_verify (page,  &bootvars->ucRTUBuf[7])<0) r=-1;
              }
-   for(int i=0;i<32000;i++);//только для 485 c RC
+   //for(int i=0;i<30000;i++)wdt_reset();
    boot_mb_write(r);
 
    if (r==1) leaveBootloader();
    wdt_reset();
    }
 }
+
+#if MB_MANCHESTER
+/*
+void BOOTLOADER_SECTION boot_char_to_manc() {
+    int outp=0,inp2=bootvars->ch;
+    int ed=1;
+    outp =inp2 & ed;
+    for(char i=0;i<7;i++){
+    ed<<=1;
+    ed<<=1;
+    inp2<<=1;
+    outp|=inp2 & ed;
+    }
+    outp|=~(outp<<1) & 0xaaaa;
+    bootvars->manc0=outp;
+    bootvars->manc1=outp>>8;
+}
+
+void BOOTLOADER_SECTION boot_manc_to_char() {
+     int     inp2,outp;
+     inp2=bootvars->manc0;
+     inp2|=bootvars->manc1;
+     char ed=1;
+     outp =inp2 & ed;
+     for(char i=0;i<7;i++){
+         inp2>>=1;
+         ed<<=1;
+         outp|=inp2 & ed;
+     }
+     bootvars->ch=outp;
+}*/
+#endif
 
 void BOOTLOADER_SECTION leaveBootloader() {
       void (*jump_to_app)(void)=0;
@@ -237,7 +272,30 @@ bootusMBCRC16( char * pucFrame, int usLen )
     }
     return crc;
 }
+#if MB_MANCHESTER
+void BOOTLOADER_SECTION boot_uart_write0(char c){
+        while (!(UCSR0A & (1<<TXC0)) && !(UCSR0A & (1<<UDRE0)));
+        UCSR0A |= (1<<TXC0);
+        UDR0=c;//таймаут ожидания таким образом определяется watchdog ом
+        DDRD|=(1<<2);//DTX 485
+        PORTD|=(1<<2);//DTX 485
+}
 
+void BOOTLOADER_SECTION boot_uart_write(char c){
+    int outp=0,inp2=c;
+    int ed=1;
+    outp =inp2 & ed;
+    for(char i=0;i<7;i++){
+    ed<<=1;
+    ed<<=1;
+    inp2<<=1;
+    outp|=inp2 & ed;
+    }
+    outp|=~(outp<<1) & 0xaaaa;
+    boot_uart_write0(outp);
+    boot_uart_write0(outp>>8);
+}
+#else
 void BOOTLOADER_SECTION boot_uart_write(char c){
         while (!(UCSR0A & (1<<TXC0)) && !(UCSR0A & (1<<UDRE0)));
         UCSR0A |= (1<<TXC0);
@@ -245,6 +303,7 @@ void BOOTLOADER_SECTION boot_uart_write(char c){
         DDRD|=(1<<2);//DTX 485
         PORTD|=(1<<2);//DTX 485
 }
+#endif
 
 char BOOTLOADER_SECTION boot_uart0_end_of_write(){
     while (!(UCSR0A & (1<<TXC0)));
@@ -255,7 +314,34 @@ char BOOTLOADER_SECTION boot_uart0_end_of_write(){
         c= UDR0;
     return c;
 }
-
+#if MB_MANCHESTER
+char BOOTLOADER_SECTION boot_uart_read0(){
+    char c;
+    for(;;){//таймаут ожидания таким образом определяется watchdog ом
+            if(UCSR0A & (1<<RXC0)) {
+                c= UDR0;
+                // boot_uart_write(c);
+                // UDR0=c;
+                return c;
+            }
+    }
+}
+char BOOTLOADER_SECTION boot_uart_read(){
+    int     inp2,outp;
+    char c=boot_uart_read0();
+    inp2 = boot_uart_read0();
+    inp2<<=8;
+    inp2|=c;
+    char ed=1;
+    outp =inp2 & ed;
+    for(char i=0;i<7;i++){
+        inp2>>=1;
+        ed<<=1;
+        outp|=inp2 & ed;
+    }
+    return outp;
+}
+#else
 char BOOTLOADER_SECTION boot_uart_read(){
     char c;
     for(;;){//таймаут ожидания таким образом определяется watchdog ом
@@ -267,6 +353,7 @@ char BOOTLOADER_SECTION boot_uart_read(){
             }
     }
 }
+#endif
 
 int  BOOTLOADER_SECTION boot_mb_read(){
   unsigned char r,*buf;

@@ -33,6 +33,7 @@
 #include "string.h"
 
 /* ----------------------- Platform includes --------------------------------*/
+#include "mbconfig.h"
 #include "port.h"
 
 /* ----------------------- Modbus includes ----------------------------------*/
@@ -46,6 +47,7 @@
 /* ----------------------- Defines ------------------------------------------*/
 #define MB_SER_PDU_SIZE_MIN     4       /*!< Minimum size of a Modbus RTU frame. */
 #define MB_SER_PDU_SIZE_MAX     256     /*!< Maximum size of a Modbus RTU frame. */
+//#define MB_SER_PDU_SIZE_MAX     128
 #define MB_SER_PDU_SIZE_CRC     2       /*!< Size of CRC field in PDU. */
 #define MB_SER_PDU_ADDR_OFF     0       /*!< Offset of slave address in Ser-PDU. */
 #define MB_SER_PDU_PDU_OFF      1       /*!< Offset of Modbus-PDU in Ser-PDU. */
@@ -69,7 +71,14 @@ typedef enum
 static volatile eMBSndState eSndState;
 static volatile eMBRcvState eRcvState;
 
+//volatile UCHAR  ucRTUBuf[MB_SER_PDU_SIZE_MAX];
+
+#if MB_MANCHESTER
+volatile UCHAR  ucRTUBuf[MB_SER_PDU_SIZE_MAX/2];
+volatile UCHAR  ucRTUBuf2[MB_SER_PDU_SIZE_MAX];
+#else
 volatile UCHAR  ucRTUBuf[MB_SER_PDU_SIZE_MAX];
+#endif
 
 static volatile UCHAR *pucSndBufferCur;
 static volatile USHORT usSndBufferCount;
@@ -77,6 +86,38 @@ static volatile USHORT usSndBufferCount;
 static volatile USHORT usRcvBufferPos;
 
 /* ----------------------- Start implementation -----------------------------*/
+#if MB_MANCHESTER
+// Conversion from unsigned char
+//            to manchester unsigned int .
+void  char_to_manc(uint8_t *inp, uint8_t * outp_d){
+    uint16_t outp=0,inp2=*inp;
+    uint16_t ed=1;
+    outp =inp2 & ed;
+    for(uint8_t i=0;i<7;i++){
+    ed<<=1;
+    ed<<=1;
+    inp2<<=1;
+    outp|=inp2 & ed;
+    }
+    outp|=~(outp<<1) & 0xaaaa;
+    *outp_d++=outp & 0xff;
+    *outp_d  =outp >>8;
+}
+
+void manc_to_char(uint8_t * inp, uint8_t * outp_d){
+   uint16_t inp2,outp;
+            inp2=*inp++;
+           inp2|=(uint16_t)*inp<<8;
+    uint8_t ed=1;
+    outp =inp2 & ed;
+    for(uint8_t i=0;i<7;i++){
+        inp2>>=1;
+        ed<<=1;
+        outp|=inp2 & ed;
+    }
+    *outp_d=outp;
+}
+#endif
 eMBErrorCode
 eMBRTUInit( UCHAR ucSlaveAddress, UCHAR ucPort, ULONG ulBaudRate, eMBParity eParity )
 {
@@ -155,7 +196,17 @@ eMBRTUReceive( UCHAR * pucRcvAddress, UCHAR ** pucFrame, USHORT * pusLength )
 
     ENTER_CRITICAL_SECTION(  );
     assert( usRcvBufferPos < MB_SER_PDU_SIZE_MAX );
-
+    #if MB_MANCHESTER
+    uint8_t *p_inp, *p_outp;
+    p_inp=ucRTUBuf2;
+    p_outp=ucRTUBuf;
+    usRcvBufferPos/=2;
+    for(int i=0;i<usRcvBufferPos;i++){
+        manc_to_char(p_inp, p_outp);
+        p_inp+=2;
+        p_outp++;
+    }
+    #endif
     /* Length and CRC check */
     if( ( usRcvBufferPos >= MB_SER_PDU_SIZE_MIN )
         && ( usMBCRC16( ( UCHAR * ) ucRTUBuf, usRcvBufferPos ) == 0 ) )
@@ -209,6 +260,18 @@ eMBRTUSend( UCHAR ucSlaveAddress, const UCHAR * pucFrame, USHORT usLength )
         usCRC16 = usMBCRC16( ( UCHAR * ) pucSndBufferCur, usSndBufferCount );
         ucRTUBuf[usSndBufferCount++] = ( UCHAR )( usCRC16 & 0xFF );
         ucRTUBuf[usSndBufferCount++] = ( UCHAR )( usCRC16 >> 8 );
+#if MB_MANCHESTER
+        uint8_t *inp,*outp;
+        inp=ucRTUBuf;
+        outp=ucRTUBuf2;
+        for(char i=0; i<usSndBufferCount; i++){
+            char_to_manc(inp, outp);
+            inp++;
+            outp+=2;
+        }
+        pucSndBufferCur = ucRTUBuf2;
+        usSndBufferCount*=2;
+#endif
 
         /* Activate the transmitter. */
         eSndState = STATE_TX_XMIT;
@@ -255,7 +318,11 @@ xMBRTUReceiveFSM( void )
          */
     case STATE_RX_IDLE:
         usRcvBufferPos = 0;
+#if MB_MANCHESTER
+        ucRTUBuf2[usRcvBufferPos++] = ucByte;
+#else
         ucRTUBuf[usRcvBufferPos++] = ucByte;
+#endif
         eRcvState = STATE_RX_RCV;
 
         /* Enable t3.5 timers. */
@@ -270,7 +337,11 @@ xMBRTUReceiveFSM( void )
     case STATE_RX_RCV:
         if( usRcvBufferPos < MB_SER_PDU_SIZE_MAX )
         {
+#if MB_MANCHESTER
+            ucRTUBuf2[usRcvBufferPos++] = ucByte;
+#else
             ucRTUBuf[usRcvBufferPos++] = ucByte;
+#endif
         }
         else
         {
@@ -301,7 +372,7 @@ xMBRTUTransmitFSM( void )
     case STATE_TX_XMIT:
         /* check if we are finished. */
         if( usSndBufferCount != 0 )
-        {
+        {  
             xMBPortSerialPutByte( ( CHAR )*pucSndBufferCur );
             pucSndBufferCur++;  /* next byte in sendbuffer. */
             usSndBufferCount--;

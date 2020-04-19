@@ -1,4 +1,4 @@
-﻿/****************************************************************************
+/****************************************************************************
  *   Copyright (C) 2010-2020 by cvy7                                        *
  *                                                                          *
  *   This program is free software; you can redistribute it and/or modify   *
@@ -47,6 +47,7 @@ char            run=0;
 #define INP_ADCT        usRegInputBuf[1]
 #define INP_U           usRegInputBuf[2]
 #define INP_T           usRegInputBuf[3]
+#define INP_B           usRegInputBuf[4]
 //Дискретные выходы
 #define OUT_STOP_BAL    usRegCoilsBuf[0]
 #define OUT_STOP_IND    usRegCoilsBuf[1]
@@ -136,7 +137,7 @@ void AUT_poll(){
     }
 
     if(INP_ADCU && INP_ADC0_READY)
-        INP_U=(SET_ADC_REF*1023UL)/INP_ADCU;
+        INP_U=(OUT_ADC_REF*1023UL)/INP_ADCU;
 
     if(INP_ADC1_READY) INP_T=INP_ADCT;
 
@@ -154,7 +155,8 @@ void AUT_poll(){
     if(INP_U>OUT_U_MIN_BAL) {
         INP_STOP_CHARGE=1;
         AUT_pwdn_time=0;
-        if(!OUT_STOP_BAL) OUT_PWM=norm_out(INP_U,OUT_U_MIN_BAL,OUT_U_MAX_BAL);
+        INP_B=norm_out(INP_U,OUT_U_MIN_BAL,OUT_U_MAX_BAL);
+        if(!OUT_STOP_BAL) OUT_PWM=INP_B;
     }
     else {
         INP_STOP_CHARGE=0;
